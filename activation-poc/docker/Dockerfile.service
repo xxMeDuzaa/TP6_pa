@@ -1,0 +1,25 @@
+FROM node:20-alpine
+WORKDIR /usr/src/app
+ARG APP_NAME
+ENV APP_NAME=${APP_NAME}
+
+# Enable corepack for pnpm if needed or just use npm workspaces
+COPY package*.json ./
+COPY apps/${APP_NAME}/package.json apps/${APP_NAME}/
+COPY libs/contracts/package.json libs/contracts/
+COPY libs/kafka-toolkit/package.json libs/kafka-toolkit/
+
+RUN npm install
+
+COPY apps/${APP_NAME} apps/${APP_NAME}
+COPY libs libs
+
+WORKDIR /usr/src/app/libs/contracts
+RUN npx tsc
+WORKDIR /usr/src/app/libs/kafka-toolkit
+RUN npx tsc
+
+WORKDIR /usr/src/app/apps/${APP_NAME}
+RUN npm run build || npx tsc
+
+CMD ["node", "dist/main.js"]

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strictPropertyInitialization": false,
+    "target": "ES2021",
+    "sourceMap": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "skipLibCheck": true,
+    "paths": {
+      "@activation-poc/contracts": ["../../libs/contracts/dist/index.d.ts"],
+      "@activation-poc/kafka-toolkit": ["../../libs/kafka-toolkit/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@activation-poc/kafka-toolkit",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "types": "dist/index.d.ts"
+}

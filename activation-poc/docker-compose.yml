@@ -1,0 +1,173 @@
+version: "3.8"
+
+services:
+  kafka:
+    image: apache/kafka:3.7.0
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka-init:
+    image: apache/kafka:3.7.0
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./docker/create-topics.sh:/create-topics.sh
+    command: ["bash", "-c", "/create-topics.sh"]
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      - kafka
+
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "try { rs.status() } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  activation-api:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        APP_NAME: activation-api
+    container_name: activation-api
+    ports:
+      - "3000:3000"
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: activation-api
+      KAFKA_GROUP_ID: activation-api-group
+      MONGO_URI: mongodb://mongo:27017/activation_api?replicaSet=rs0
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  billing-service:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        APP_NAME: billing-service
+    container_name: billing-service
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: billing-svc
+      KAFKA_GROUP_ID: billing-svc
+      MONGO_URI: mongodb://mongo:27017/billing_service?replicaSet=rs0
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  provisioning-service:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        APP_NAME: provisioning-service
+    container_name: provisioning-service
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: provisioning-svc
+      KAFKA_GROUP_ID: provisioning-svc
+      MONGO_URI: mongodb://mongo:27017/provisioning_service?replicaSet=rs0
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  notification-service:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        APP_NAME: notification-service
+    container_name: notification-service
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: notification-svc
+      KAFKA_GROUP_ID: notification-svc
+      MONGO_URI: mongodb://mongo:27017/notification_service?replicaSet=rs0
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  crm-analytics-service:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        APP_NAME: crm-analytics-service
+    container_name: crm-analytics-service
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: crm-analytics-svc
+      KAFKA_GROUP_ID: crm-analytics
+      MONGO_URI: mongodb://mongo:27017/crm_analytics_service?replicaSet=rs0
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  demo-ui:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.ui
+    container_name: demo-ui
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    depends_on:
+      - activation-api

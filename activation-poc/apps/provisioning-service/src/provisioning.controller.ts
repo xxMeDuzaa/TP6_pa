@@ -1,4 +1,4 @@
-import { Controller, Inject, OnModuleInit } from '@nestjs/common';
+import { Controller, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { ClientKafka, EventPattern, Payload, Ctx } from '@nestjs/microservices';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
@@ -10,6 +10,8 @@ import { ProcessedEvent } from './schemas/processed-event.schema';
 
 @Controller()
 export class ProvisioningController implements OnModuleInit {
+  private readonly logger = new Logger(ProvisioningController.name);
+
   constructor(
     @InjectModel(ProvisioningOrder.name) private readonly provisioningModel: Model<ProvisioningOrder>,
     @InjectModel(ProcessedEvent.name) private readonly processedModel: Model<ProcessedEvent>,
@@ -62,5 +64,6 @@ export class ProvisioningController implements OnModuleInit {
       source: 'provisioning-service',
     };
     ctx.publish(TOPICS.PROVISIONING_EVENTS, { key: event.customerId, value: event });
+    this.logger.log(`${eventType} -> ${source.correlationId} (cliente ${source.customerId})`);
   }
 }

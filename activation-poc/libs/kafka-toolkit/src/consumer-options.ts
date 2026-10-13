@@ -3,7 +3,12 @@ import { KafkaOptions, Transport } from '@nestjs/microservices';
 export interface KafkaConsumerConfig {
   clientId: string;
   groupId: string;
-  /** true → lee el topic desde el inicio si el grupo no tiene offsets (auto.offset.reset=earliest). */
+  /**
+   * auto.offset.reset. Default true (earliest): si el grupo no tiene offset commiteado en una
+   * partición, la lee desde el inicio. Con "latest", un consumidor que se cae antes de haber
+   * procesado algo en una partición se saltearía los mensajes llegados mientras estaba caído
+   * (violaría RNF-05). Releer no duplica efectos porque los consumidores son idempotentes.
+   */
   fromBeginning?: boolean;
 }
 
@@ -26,7 +31,7 @@ export function kafkaConsumerOptions(config: KafkaConsumerConfig): KafkaOptions 
       consumer: {
         groupId: config.groupId,
       },
-      subscribe: { fromBeginning: config.fromBeginning ?? false },
+      subscribe: { fromBeginning: config.fromBeginning ?? true },
       run: { autoCommit: false },
     },
   };

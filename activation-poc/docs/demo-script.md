@@ -86,6 +86,13 @@ lo suyo. Nadie le ordenó nada.
 
 ## Escenario 3 — Servicio caído · *Offset: nadie pierde mensajes*
 
+> **Antes de la demo:** Kafka sólo puede mostrar el lag de una partición si el grupo ya tiene un
+> offset commiteado en ella. Asegurate de que `notification-svc` haya procesado al menos un mensaje
+> en **cada una de las 3 particiones** de `activation.events`: creá 5 o 6 activaciones con clientes
+> distintos durante el Escenario 1. Para verificarlo, el comando de abajo tiene que listar las
+> particiones 0, 1 y 2. Aunque alguna no aparezca, los mensajes **no se pierden**: los consumidores
+> usan `auto.offset.reset=earliest` y la leen desde el inicio al volver.
+
 **Qué se hace:**
 ```bash
 docker compose stop notification-service

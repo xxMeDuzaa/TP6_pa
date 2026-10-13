@@ -1,44 +1,59 @@
-import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { EventLog, EventLogDocument } from './schemas/event-log.schema';
-import { ProcessedEvent, ProcessedEventDocument } from './schemas/processed-event.schema';
-import { TOPICS, ActivationEvent } from '@activation-poc/contracts';
+import { Controller, Inject, OnModuleInit } from '@nestjs/common';
+import { ClientKafka, EventPattern, Payload, Ctx } from '@nestjs/microservices';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model } from 'mongoose';
+import { ActivationEvent, TOPICS } from '@activation-poc/contracts';
+import { processIdempotent, RetryWithDlq } from '@activation-poc/kafka-toolkit';
+import { EventLog } from './schemas/event-log.schema';
+import { ProcessedEvent } from './schemas/processed-event.schema';
 
 @Controller()
-export class CrmController {
+export class CrmController implements OnModuleInit {
   constructor(
-    @InjectModel(EventLog.name) private eventLogModel: Model<EventLogDocument>,
-    @InjectModel(ProcessedEvent.name) private eventModel: Model<ProcessedEventDocument>,
+    @InjectModel(EventLog.name) private readonly eventLogModel: Model<EventLog>,
+    @InjectModel(ProcessedEvent.name) private readonly processedModel: Model<ProcessedEvent>,
+    @InjectConnection() private readonly connection: Connection,
+    @Inject('KAFKA_CLIENT') private readonly kafkaClient: ClientKafka, // sólo para la DLQ
   ) {}
 
+  async onModuleInit() {
+    await this.kafkaClient.connect();
+  }
+
   @EventPattern(TOPICS.ACTIVATION_REQUESTED)
-  async handleRequested(@Payload() message: any) { await this.logEvent(message); }
+  @RetryWithDlq(TOPICS.ACTIVATION_REQUESTED)
+  async handleRequested(@Payload() event: ActivationEvent, @Ctx() _context: unknown) {
+    await this.logEvent(event, TOPICS.ACTIVATION_REQUESTED);
+  }
 
   @EventPattern(TOPICS.BILLING_EVENTS)
-  async handleBilling(@Payload() message: any) { await this.logEvent(message); }
+  @RetryWithDlq(TOPICS.BILLING_EVENTS)
+  async handleBilling(@Payload() event: ActivationEvent, @Ctx() _context: unknown) {
+    await this.logEvent(event, TOPICS.BILLING_EVENTS);
+  }
 
   @EventPattern(TOPICS.PROVISIONING_EVENTS)
-  async handleProvisioning(@Payload() message: any) { await this.logEvent(message); }
+  @RetryWithDlq(TOPICS.PROVISIONING_EVENTS)
+  async handleProvisioning(@Payload() event: ActivationEvent, @Ctx() _context: unknown) {
+    await this.logEvent(event, TOPICS.PROVISIONING_EVENTS);
+  }
 
   @EventPattern(TOPICS.ACTIVATION_EVENTS)
-  async handleFinal(@Payload() message: any) { await this.logEvent(message); }
+  @RetryWithDlq(TOPICS.ACTIVATION_EVENTS)
+  async handleFinal(@Payload() event: ActivationEvent, @Ctx() _context: unknown) {
+    await this.logEvent(event, TOPICS.ACTIVATION_EVENTS);
+  }
 
-  private async logEvent(event: ActivationEvent) {
-    try {
-      const exists = await this.eventModel.findOne({ eventId: event.eventId });
-      if (exists) return; 
-      
-      await this.eventLogModel.create({
-        eventId: event.eventId,
-        correlationId: event.correlationId,
-        payload: event
-      });
-      await this.eventModel.create({ eventId: event.eventId });
-    } catch (error) {
-      console.error('Error processing event', error);
-      throw error;
-    }
+  private async logEvent(event: ActivationEvent, topic: string) {
+    await processIdempotent(
+      event,
+      { processedModel: this.processedModel, connection: this.connection, topic },
+      async (e, ctx) => {
+        await this.eventLogModel.create(
+          [{ eventId: e.eventId, correlationId: e.correlationId, topic, payload: e }],
+          { session: ctx.session },
+        );
+      },
+    );
   }
 }

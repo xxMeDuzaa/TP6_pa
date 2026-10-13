@@ -57,6 +57,7 @@ function App() {
           <option value="none">Sin fallo</option>
           <option value="billing">Fallo en Billing</option>
           <option value="provisioning">Fallo en Provisioning</option>
+          <option value="dlq">Fallo técnico en Billing (DLQ)</option>
         </select>
         <button type="submit">Contratar Plan</button>
       </form>

@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 
 export type BillingAccountDocument = BillingAccount & Document;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'billing_accounts' })
 export class BillingAccount {
   @Prop({ required: true, unique: true })
   activationId: string;

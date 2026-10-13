@@ -4,13 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:libs": "npm run build -w @activation-poc/contracts -w @activation-poc/kafka-toolkit",
+    "build:services": "npm run build -w @activation-poc/activation-api -w @activation-poc/billing-service -w @activation-poc/provisioning-service -w @activation-poc/notification-service -w @activation-poc/crm-analytics-service -w @activation-poc/loyalty-service",
+    "build": "npm run build:libs && npm run build:services"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "private": "true",
+  "private": true,
   "workspaces": [
     "apps/*",
     "libs/*"

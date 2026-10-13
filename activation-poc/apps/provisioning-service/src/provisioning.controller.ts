@@ -1,71 +1,66 @@
-import { Controller, Inject } from '@nestjs/common';
-import { EventPattern, Payload, ClientKafka } from '@nestjs/microservices';
-import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { Model, Connection } from 'mongoose';
-import { ProvisioningOrder, ProvisioningOrderDocument } from './schemas/provisioning-order.schema';
-import { ProcessedEvent, ProcessedEventDocument } from './schemas/processed-event.schema';
-import { TOPICS, ActivationEvent } from '@activation-poc/contracts';
-import { processWithIdempotencyAndDlq } from '@activation-poc/kafka-toolkit';
+import { Controller, Inject, OnModuleInit } from '@nestjs/common';
+import { ClientKafka, EventPattern, Payload, Ctx } from '@nestjs/microservices';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
+import { ActivationEvent, TOPICS } from '@activation-poc/contracts';
+import { HandlerContext, processIdempotent, RetryWithDlq } from '@activation-poc/kafka-toolkit';
+import { ProvisioningOrder } from './schemas/provisioning-order.schema';
+import { ProcessedEvent } from './schemas/processed-event.schema';
 
 @Controller()
-export class ProvisioningController {
+export class ProvisioningController implements OnModuleInit {
   constructor(
-    @InjectModel(ProvisioningOrder.name) private provisioningModel: Model<ProvisioningOrderDocument>,
-    @InjectModel(ProcessedEvent.name) private eventModel: Model<ProcessedEventDocument>,
-    @InjectConnection() private connection: Connection,
-    @Inject('KAFKA_CLIENT') private kafkaClient: ClientKafka,
+    @InjectModel(ProvisioningOrder.name) private readonly provisioningModel: Model<ProvisioningOrder>,
+    @InjectModel(ProcessedEvent.name) private readonly processedModel: Model<ProcessedEvent>,
+    @InjectConnection() private readonly connection: Connection,
+    @Inject('KAFKA_CLIENT') private readonly kafkaClient: ClientKafka,
   ) {}
 
   async onModuleInit() {
-    this.kafkaClient.subscribeToResponseOf(TOPICS.PROVISIONING_EVENTS);
     await this.kafkaClient.connect();
   }
 
   @EventPattern(TOPICS.ACTIVATION_REQUESTED)
-  async handleActivationRequested(@Payload() message: any) {
-    const event = message as ActivationEvent;
-    await processWithIdempotencyAndDlq({
-      event,
-      eventModel: this.eventModel,
-      topic: TOPICS.ACTIVATION_REQUESTED,
-      connection: this.connection,
-      kafkaClient: this.kafkaClient,
-      handler: async (e) => {
-        // Simulate provisioning delay 1-3 seconds
-        const delay = Math.floor(Math.random() * 2000) + 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
+  @RetryWithDlq(TOPICS.ACTIVATION_REQUESTED)
+  async handleActivationRequested(@Payload() event: ActivationEvent, @Ctx() _context: unknown) {
+    // La demora simulada (1-3 s) va ANTES de abrir la transacción para no mantenerla abierta.
+    const delay = Math.floor(Math.random() * 2000) + 1000;
+    await new Promise((resolve) => setTimeout(resolve, delay));
 
+    await processIdempotent(
+      event,
+      {
+        processedModel: this.processedModel,
+        connection: this.connection,
+        emitter: this.kafkaClient,
+        topic: TOPICS.ACTIVATION_REQUESTED,
+      },
+      async (e, ctx) => {
         if (e.payload?.simulateFailure === 'provisioning') {
-          await this.publishEvent('ProvisioningFailed', e);
+          this.publish(ctx, 'ProvisioningFailed', e);
           return;
         }
 
-        await this.provisioningModel.create({
-          activationId: e.correlationId,
-          customerId: e.customerId,
-          status: 'COMPLETED',
-        });
-
-        await this.publishEvent('ProvisioningCompleted', e);
+        await this.provisioningModel.create(
+          [{ activationId: e.correlationId, customerId: e.customerId, status: 'COMPLETED' }],
+          { session: ctx.session },
+        );
+        this.publish(ctx, 'ProvisioningCompleted', e);
       },
-    });
+    );
   }
 
-  private async publishEvent(eventType: string, sourceEvent: ActivationEvent) {
+  private publish(ctx: HandlerContext, eventType: string, source: ActivationEvent) {
     const event: ActivationEvent = {
       eventId: uuidv4(),
       eventType,
       version: 1,
       occurredAt: new Date().toISOString(),
-      correlationId: sourceEvent.correlationId,
-      customerId: sourceEvent.customerId,
+      correlationId: source.correlationId,
+      customerId: source.customerId,
       source: 'provisioning-service',
     };
-
-    this.kafkaClient.emit(TOPICS.PROVISIONING_EVENTS, {
-      key: event.customerId,
-      value: event,
-    });
+    ctx.publish(TOPICS.PROVISIONING_EVENTS, { key: event.customerId, value: event });
   }
 }

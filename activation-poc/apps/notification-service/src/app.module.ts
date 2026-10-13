@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { MongooseModule } from '@nestjs/mongoose';
 import { NotificationController } from './notification.controller';
 import { Notification, NotificationSchema } from './schemas/notification.schema';
@@ -6,10 +7,24 @@ import { ProcessedEvent, ProcessedEventSchema } from './schemas/processed-event.
 
 @Module({
   imports: [
-    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/notification_service'),
+    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/notification_service?directConnection=true'),
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
       { name: ProcessedEvent.name, schema: ProcessedEventSchema },
+    ]),
+    // Productor: eventos de negocio (si corresponde) y mensajes a <topic>.dlq
+    ClientsModule.register([
+      {
+        name: 'KAFKA_CLIENT',
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            clientId: `${process.env.KAFKA_CLIENT_ID || 'notification-svc'}-producer`,
+            brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+          },
+          producerOnlyMode: true,
+        },
+      },
     ]),
   ],
   controllers: [NotificationController],

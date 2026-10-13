@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 
 export type ActivationDocument = Activation & Document;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'activations' })
 export class Activation {
   @Prop({ required: true })
   _id: string; // The activationId
@@ -27,7 +27,7 @@ export class Activation {
   };
 
   @Prop({ type: Array, default: [] })
-  history: Array<{ eventType: string; at: Date }>;
+  history: Array<{ eventType: string; eventId?: string; at: Date }>;
 }
 
 export const ActivationSchema = SchemaFactory.createForClass(Activation);

@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'provisioning_orders' })
 export class ProvisioningOrder {
   @Prop({ required: true, unique: true })
   activationId: string;

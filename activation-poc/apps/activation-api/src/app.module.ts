@@ -8,7 +8,7 @@ import { Activation, ActivationSchema } from './schemas/activation.schema';
 
 @Module({
   imports: [
-    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/activation_api'),
+    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/activation_api?directConnection=true'),
     MongooseModule.forFeature([{ name: Activation.name, schema: ActivationSchema }]),
     ClientsModule.register([
       {
@@ -17,11 +17,9 @@ import { Activation, ActivationSchema } from './schemas/activation.schema';
         options: {
           client: {
             clientId: process.env.KAFKA_CLIENT_ID || 'activation-api',
-            brokers: [process.env.KAFKA_BROKERS || 'localhost:9092'],
+            brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
           },
-          consumer: {
-            groupId: 'activation-api-producer',
-          },
+          producerOnlyMode: true,
         },
       },
     ]),

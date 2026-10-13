@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   kafka:
     image: apache/kafka:3.7.0
@@ -33,10 +31,10 @@ services:
         condition: service_healthy
     volumes:
       - ./docker/create-topics.sh:/create-topics.sh
-    command: ["bash", "-c", "/create-topics.sh"]
+    command: ["bash", "/create-topics.sh"]
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: kafbat/kafka-ui:latest
     container_name: kafka-ui
     ports:
       - "8080:8080"
@@ -78,11 +76,11 @@ services:
     environment:
       KAFKA_BROKERS: kafka:9092
       KAFKA_CLIENT_ID: activation-api
-      KAFKA_GROUP_ID: activation-api-group
+      KAFKA_GROUP_ID: activation-api
       MONGO_URI: mongodb://mongo:27017/activation_api?replicaSet=rs0
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
 
@@ -92,15 +90,15 @@ services:
       dockerfile: docker/Dockerfile.service
       args:
         APP_NAME: billing-service
-    container_name: billing-service
+    # Sin container_name: permite `docker compose up -d --scale billing-service=2` (Escenario 4)
     environment:
       KAFKA_BROKERS: kafka:9092
       KAFKA_CLIENT_ID: billing-svc
       KAFKA_GROUP_ID: billing-svc
       MONGO_URI: mongodb://mongo:27017/billing_service?replicaSet=rs0
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
 
@@ -117,8 +115,8 @@ services:
       KAFKA_GROUP_ID: provisioning-svc
       MONGO_URI: mongodb://mongo:27017/provisioning_service?replicaSet=rs0
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
 
@@ -137,8 +135,8 @@ services:
       SMTP_HOST: mailhog
       SMTP_PORT: 1025
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
 
@@ -155,8 +153,8 @@ services:
       KAFKA_GROUP_ID: crm-analytics
       MONGO_URI: mongodb://mongo:27017/crm_analytics_service?replicaSet=rs0
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       mongo:
         condition: service_healthy
 
@@ -171,3 +169,27 @@ services:
       VITE_API_URL: http://localhost:3000
     depends_on:
       - activation-api
+
+  # Escenario 5: consumidor que se incorpora tarde y relee activation.events desde el inicio.
+  # No arranca con `docker compose up`; se levanta con:
+  #   docker compose --profile loyalty up -d --build loyalty-service
+  loyalty-service:
+    profiles: ["loyalty"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        APP_NAME: loyalty-service
+    container_name: loyalty-service
+    ports:
+      - "3005:3005"
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_CLIENT_ID: loyalty-svc
+      KAFKA_GROUP_ID: loyalty-svc
+      AUTO_OFFSET_RESET: earliest
+      POINTS_PER_ACTIVATION: 100
+      PORT: 3005
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully

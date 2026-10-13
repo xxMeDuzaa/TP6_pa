@@ -1,9 +1,9 @@
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /usr/src/app
 ARG APP_NAME
 ENV APP_NAME=${APP_NAME}
 
-# Enable corepack for pnpm if needed or just use npm workspaces
+# Manifiestos primero para aprovechar la caché de capas (npm workspaces)
 COPY package*.json ./
 COPY apps/${APP_NAME}/package.json apps/${APP_NAME}/
 COPY libs/contracts/package.json libs/contracts/
@@ -11,15 +11,13 @@ COPY libs/kafka-toolkit/package.json libs/kafka-toolkit/
 
 RUN npm install
 
-COPY apps/${APP_NAME} apps/${APP_NAME}
 COPY libs libs
+COPY apps/${APP_NAME} apps/${APP_NAME}
 
-WORKDIR /usr/src/app/libs/contracts
-RUN npx tsc
-WORKDIR /usr/src/app/libs/kafka-toolkit
-RUN npx tsc
+# Librerías compartidas primero, después el servicio
+RUN npm run build -w @activation-poc/contracts \
+ && npm run build -w @activation-poc/kafka-toolkit \
+ && npm run build -w @activation-poc/${APP_NAME}
 
 WORKDIR /usr/src/app/apps/${APP_NAME}
-RUN npm run build || npx tsc
-
 CMD ["node", "dist/main.js"]

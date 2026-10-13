@@ -1,23 +1,18 @@
 import { NestFactory } from '@nestjs/core';
+import { MicroserviceOptions } from '@nestjs/microservices';
+import { kafkaConsumerOptions } from '@activation-poc/kafka-toolkit';
 import { AppModule } from './app.module';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors();
 
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.KAFKA,
-    options: {
-      client: {
-        brokers: [process.env.KAFKA_BROKERS || 'localhost:9092'],
-        clientId: process.env.KAFKA_CLIENT_ID || 'activation-api',
-      },
-      consumer: {
-        groupId: process.env.KAFKA_GROUP_ID || 'activation-api-group',
-      },
-    },
-  });
+  app.connectMicroservice<MicroserviceOptions>(
+    kafkaConsumerOptions({
+      clientId: process.env.KAFKA_CLIENT_ID || 'activation-api',
+      groupId: process.env.KAFKA_GROUP_ID || 'activation-api',
+    }),
+  );
 
   await app.startAllMicroservices();
   await app.listen(3000);

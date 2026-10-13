@@ -1,9 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type NotificationDocument = Notification & Document;
-
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'notifications' })
 export class Notification {
   @Prop({ required: true })
   activationId: string;
@@ -18,5 +16,6 @@ export class Notification {
   status: string;
 }
 
+export type NotificationDocument = Notification & Document;
 export const NotificationSchema = SchemaFactory.createForClass(Notification);
 NotificationSchema.index({ activationId: 1, eventType: 1 });

@@ -1,18 +1,28 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "declaration": true,
     "target": "ES2021",
+    "lib": [
+      "ES2021"
+    ],
+    "types": [
+      "node"
+    ],
     "rootDir": "./src",
     "outDir": "./dist",
-    "strict": true,
-    "experimentalDecorators": true,
+    "declaration": true,
+    "sourceMap": true,
     "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
     "esModuleInterop": true,
-    "skipLibCheck": true,
-    "paths": {
-      "@activation-poc/contracts": ["../contracts/dist/index.d.ts"]
-    }
+    "strict": true,
+    "skipLibCheck": true
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

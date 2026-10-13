@@ -1,11 +1,15 @@
-import { Controller, Post, Body, Get, Param, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, HttpCode, Inject } from '@nestjs/common';
 import { ActivationService } from './activation.service';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import { ClientKafka, EventPattern, Payload, Ctx } from '@nestjs/microservices';
 import { TOPICS } from '@activation-poc/contracts';
+import { RetryWithDlq } from '@activation-poc/kafka-toolkit';
 
 @Controller('activations')
 export class ActivationController {
-  constructor(private readonly activationService: ActivationService) {}
+  constructor(
+    private readonly activationService: ActivationService,
+    @Inject('KAFKA_CLIENT') private readonly kafkaClient: ClientKafka, // usado por @RetryWithDlq
+  ) {}
 
   @Post()
   @HttpCode(202)
@@ -20,12 +24,14 @@ export class ActivationController {
   }
 
   @EventPattern(TOPICS.BILLING_EVENTS)
-  async handleBillingEvents(@Payload() message: any) {
+  @RetryWithDlq(TOPICS.BILLING_EVENTS)
+  async handleBillingEvents(@Payload() message: any, @Ctx() _context: unknown) {
     await this.activationService.handleEvent(message);
   }
 
   @EventPattern(TOPICS.PROVISIONING_EVENTS)
-  async handleProvisioningEvents(@Payload() message: any) {
+  @RetryWithDlq(TOPICS.PROVISIONING_EVENTS)
+  async handleProvisioningEvents(@Payload() message: any, @Ctx() _context: unknown) {
     await this.activationService.handleEvent(message);
   }
 }

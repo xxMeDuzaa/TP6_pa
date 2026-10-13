@@ -16,8 +16,6 @@ export class ActivationService {
   ) {}
 
   async onModuleInit() {
-    this.kafkaClient.subscribeToResponseOf(TOPICS.ACTIVATION_REQUESTED);
-    this.kafkaClient.subscribeToResponseOf(TOPICS.ACTIVATION_EVENTS);
     await this.kafkaClient.connect();
   }
 
@@ -71,8 +69,11 @@ export class ActivationService {
     if (!activation) return;
 
     const { eventType } = event;
-    
-    activation.history.push({ eventType, at: new Date(event.occurredAt) });
+
+    // Idempotencia liviana: un mismo eventId no se aplica dos veces al historial
+    if (activation.history.some((h: any) => h.eventId === event.eventId)) return;
+
+    activation.history.push({ eventType, eventId: event.eventId, at: new Date(event.occurredAt) });
 
     if (eventType === 'BillingAccountCreated') {
       activation.steps = { ...activation.steps, billing: { status: 'OK', at: new Date() } };
